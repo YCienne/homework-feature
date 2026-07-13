@@ -1,0 +1,6 @@
+__pycache__/
+.hwsenv/
+.pytest_cache/
+.vscode/
+node_modules/
+.env

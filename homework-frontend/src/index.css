@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #f0faf9;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #1a2332;
+  }
+}
+
+@layer components {
+  .btn-gradient {
+    @apply w-full py-4 rounded-full text-white font-semibold text-base
+           flex items-center justify-center gap-2 transition-opacity;
+    background: linear-gradient(to right, #7c3aed, #a855f7, #ec4899);
+  }
+  .btn-gradient:hover { opacity: 0.92; }
+  .btn-gradient:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .card {
+    @apply bg-white rounded-2xl border border-brand-teal-border shadow-sm;
+  }
+
+  .progress-bar {
+    height: 6px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, #7c3aed, #ec4899);
+  }
+}
+
+/* Spinner animation */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.spinner-dark {
+  border-color: rgba(44,181,165,0.3);
+  border-top-color: #2ab5a5;
+}
