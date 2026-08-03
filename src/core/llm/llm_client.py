@@ -1,7 +1,13 @@
 """
-LLM Client — supports DeepSeek, Gemini, and Anthropic Claude.
+LLM Client — supports DeepSeek, Gemini, Anthropic (direct API), and Claude Platform on AWS.
 Switch providers by setting LLM_PROVIDER in .env:
-LLM_PROVIDER=gemini
+LLM_PROVIDER=gemini | deepseek | anthropic | anthropic_aws
+
+anthropic_aws authenticates via AWS IAM/SigV4 (the default AWS credential chain)
+rather than an API key, and requires CLAUDE_AWS_REGION. The workspace's AWS
+region only scopes IAM/billing — it does not pin where inference runs, so it
+is not on its own a data-residency guarantee (confirm with Anthropic if a
+requirement like POPIA applies before relying on region choice alone).
 """
 import logging
 import asyncio
@@ -10,8 +16,17 @@ from src.config.settings import get_settings
 logger = logging.getLogger(__name__)
 
 _anthropic_client = None
+_anthropic_aws_client = None
 _gemini_client = None  # Updated to track the modern unified GenAI client instance
 _deepseek_client = None
+
+
+def _split_system(messages: list[dict]) -> tuple[str | None, list[dict]]:
+    """Separates system-role messages (native system prompt) from the rest."""
+    system_parts = [m["content"] for m in messages if m.get("role") == "system"]
+    rest = [m for m in messages if m.get("role") != "system"]
+    system = "\n\n".join(system_parts) if system_parts else None
+    return system, rest
 
 def _get_deepseek_client():
     global _deepseek_client
@@ -32,6 +47,21 @@ def _get_anthropic_client():
         _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     return _anthropic_client
 
+def _get_anthropic_aws_client():
+    """Claude Platform on AWS — IAM/SigV4 auth via the AWS default credential
+    chain, not an API key. Beta SDK surface; requires anthropic>=0.117.1."""
+    global _anthropic_aws_client
+    if _anthropic_aws_client is None:
+        from anthropic import AsyncAnthropicAWS
+        settings = get_settings()
+        if not settings.claude_aws_region:
+            raise LLMProviderError("claude_aws_region is not configured for the anthropic_aws provider")
+        _anthropic_aws_client = AsyncAnthropicAWS(
+            aws_region=settings.claude_aws_region,
+            workspace_id=settings.claude_aws_workspace_id or None,
+        )
+    return _anthropic_aws_client
+
 def _get_gemini_client():
     """Initializes the modern Google GenAI Client with explicit API key access."""
     global _gemini_client
@@ -49,10 +79,12 @@ async def call_llm(messages: list[dict]) -> str:
         return await _call_deepseek(messages)
     elif provider == "anthropic":
         return await _call_anthropic(messages)
+    elif provider == "anthropic_aws":
+        return await _call_anthropic_aws(messages)
     elif provider == "gemini":
         return await _call_gemini(messages)
     else:
-        raise LLMProviderError(f"Unknown LLM_PROVIDER: '{provider}'. Must be deepseek, anthropic, or gemini.")
+        raise LLMProviderError(f"Unknown LLM_PROVIDER: '{provider}'. Must be deepseek, anthropic, anthropic_aws, or gemini.")
 
 async def _call_deepseek(messages: list[dict]) -> str:
     try:
@@ -76,14 +108,27 @@ async def _call_anthropic(messages: list[dict]) -> str:
     try:
         settings = get_settings()
         client = _get_anthropic_client()
-        response = await client.messages.create(
-            model=settings.llm_model_anthropic,
-            max_tokens=1000,
-            messages=messages,
-        )
+        system, rest = _split_system(messages)
+        kwargs = {"model": settings.llm_model_anthropic, "max_tokens": 1000, "messages": rest}
+        if system:
+            kwargs["system"] = system
+        response = await client.messages.create(**kwargs)
         return response.content[0].text
     except Exception as e:
         raise LLMProviderError(str(e))
+
+async def _call_anthropic_aws(messages: list[dict]) -> str:
+    try:
+        settings = get_settings()
+        client = _get_anthropic_aws_client()
+        system, rest = _split_system(messages)
+        kwargs = {"model": settings.llm_model_anthropic, "max_tokens": 1000, "messages": rest}
+        if system:
+            kwargs["system"] = system
+        response = await client.messages.create(**kwargs)
+        return response.content[0].text
+    except Exception as e:
+        raise LLMProviderError(f"Claude Platform on AWS error: {e}")
 
 async def _call_gemini(messages: list[dict]) -> str:
     """Executes a structured text completion via the updated google-genai client."""
@@ -91,21 +136,23 @@ async def _call_gemini(messages: list[dict]) -> str:
         from google.genai import types
         settings = get_settings()
         client = _get_gemini_client()
-        
-        # Format list arrays into a simple sequential prompt block string
-        prompt = "\n\n".join(m["content"] for m in messages if m.get("content"))
+        system, rest = _split_system(messages)
+
+        # Format remaining (non-system) turns into a simple sequential prompt block string
+        prompt = "\n\n".join(m["content"] for m in rest if m.get("content"))
         
         # Execute the call in an external asynchronous worker thread pool
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
-            None, 
+            None,
             lambda: client.models.generate_content(
                 model=settings.llm_model_gemini, # Reads gemini-1.5-flash from settings
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.3,
                     max_output_tokens=1000,
-                    response_mime_type="application/json" # Forces structured output format
+                    response_mime_type="application/json", # Forces structured output format
+                    system_instruction=system,
                 )
             )
         )

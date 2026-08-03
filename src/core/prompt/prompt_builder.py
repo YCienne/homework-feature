@@ -21,7 +21,8 @@ VALID_ACTIONS = {"START", "CONTINUE", "IM_NOT_SURE", "SHOW_NEXT_STEP", "EXPLAIN_
 
 def _to_messages(system: str, user: str) -> list[dict]:
     return [
-        {"role": "user", "content": f"[SYSTEM]\n{system}\n\n[USER]\n{user}"}
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
     ]
 
 

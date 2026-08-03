@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     # ── LLM Provider ──────────────────────────────────────────────────────────
-    llm_provider: str = Field(default="gemini")   # deepseek | gemini | anthropic
+    llm_provider: str = Field(default="gemini")   # deepseek | gemini | anthropic | anthropic_aws
     anthropic_api_key: str = Field(default="")
     gemini_api_key: str = Field(default="")
     deepseek_api_key: str = Field(default="")
@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     llm_model_gemini: str = Field(default="gemini-2.0-flash")
     llm_model_deepseek: str = Field(default="deepseek-chat")
     llm_timeout_ms: int = Field(default=15000)
+
+    # ── Claude Platform on AWS (IAM/SigV4 — no API key) ─────────────────────────
+    # Left unset by default: the workspace region only scopes IAM/billing, not
+    # where inference runs, so it must be chosen deliberately rather than
+    # inherited from aws_region below (see llm_client.py docstring).
+    claude_aws_region: str = Field(default="")
+    claude_aws_workspace_id: str = Field(default="")
 
     # ── Image Extraction ──────────────────────────────────────────────────────
     image_extraction_provider: str = Field(default="gemini")  # gemini | anthropic

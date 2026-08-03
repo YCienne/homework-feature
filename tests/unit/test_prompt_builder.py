@@ -12,14 +12,15 @@ def make_session(**kw) -> Session:
 def test_start_returns_messages():
     msgs = build_prompt("START", make_session())
     assert isinstance(msgs, list)
-    assert len(msgs) == 1
-    assert msgs[0]["role"] == "user"
-    assert "gravity" in msgs[0]["content"].lower()
+    assert len(msgs) == 2
+    assert msgs[0]["role"] == "system"
+    assert msgs[1]["role"] == "user"
+    assert "gravity" in msgs[1]["content"].lower()
 
 
 def test_start_contains_no_answer():
     msgs = build_prompt("START", make_session())
-    content = msgs[0]["content"].lower()
+    content = " ".join(m["content"] for m in msgs).lower()
     assert "do not solve" in content or "never give" in content or "guide" in content
 
 
@@ -27,14 +28,14 @@ def test_continue_references_student_response():
     session = make_session(current_step_index=1)
     session.step_history.append(StepRecord(step_index=0, step_question="What do you know?", student_response="I know gravity pulls things down"))
     msgs = build_prompt("CONTINUE", session, student_response="I know gravity pulls things down")
-    assert "gravity pulls things down" in msgs[0]["content"]
+    assert "gravity pulls things down" in msgs[1]["content"]
 
 
 def test_im_not_sure_references_current_question():
     session = make_session()
     session.last_step_question = "What force keeps planets in orbit?"
     msgs = build_prompt("IM_NOT_SURE", session)
-    assert "orbit" in msgs[0]["content"]
+    assert "orbit" in msgs[1]["content"]
 
 
 def test_explain_again_references_explanation():
@@ -42,7 +43,7 @@ def test_explain_again_references_explanation():
     session.last_step_explanation = "Gravity is a force of attraction."
     session.last_step_question = "What is the formula?"
     msgs = build_prompt("EXPLAIN_AGAIN", session)
-    assert "attraction" in msgs[0]["content"]
+    assert "attraction" in msgs[1]["content"]
 
 
 def test_invalid_action_raises():
