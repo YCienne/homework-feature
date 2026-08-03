@@ -49,7 +49,7 @@ class SessionCreate(BaseModel):
     lesson_subject: Optional[str] = None
     lesson_topic: Optional[str] = None
     grade_level: Optional[str] = None
-    extraction_id: Optional[str] = None  
+    extraction_id: Optional[str] = None
 
 
 class ActionRequest(BaseModel):
