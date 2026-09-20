@@ -166,7 +166,7 @@ real Cognito validation when `ENVIRONMENT=development` (see
 pytest
 ```
 
-99 tests — unit tests per module plus integration tests exercising the full
+107 tests — unit tests per module plus integration tests exercising the full
 FastAPI request/response cycle. `conftest.py` auto-overrides Cognito auth, the
 rate limiter, Redis, and the DB session for every test, so the suite never
 needs a real Redis/MySQL/Cognito connection.
