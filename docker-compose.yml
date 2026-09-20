@@ -11,7 +11,7 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=debug
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=mysql+pymysql://root:devpassword@mysql:3306/homework_db
+      - DATABASE_URL=mysql+pymysql://root:devpassword@mysql:3306/learnairium
     depends_on:
       redis:
         condition: service_healthy
@@ -37,7 +37,7 @@ services:
       - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: devpassword
-      MYSQL_DATABASE: homework_db
+      MYSQL_DATABASE: learnairium
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s

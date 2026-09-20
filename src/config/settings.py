@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     # ── LLM Provider ──────────────────────────────────────────────────────────
-    llm_provider: str = Field(default="gemini")   # deepseek | gemini | anthropic | anthropic_aws
+    llm_provider: str = Field(default="anthropic")   # deepseek | gemini | anthropic | anthropic_aws
     anthropic_api_key: str = Field(default="")
     gemini_api_key: str = Field(default="")
     deepseek_api_key: str = Field(default="")

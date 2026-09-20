@@ -1,12 +1,9 @@
 -- Migration: Create concept_tags table
--- Run this against your AWS RDS MySQL instance (homework_db schema)
--- before deploying Phase 4.
+-- Run this against the shared `learnairium` AWS RDS schema (see README.md —
+-- Database section) before deploying Phase 4. Does not create its own
+-- database — the schema already exists and is shared with the main platform.
 
-CREATE DATABASE IF NOT EXISTS homework_db
-    CHARACTER SET utf8mb4
-    COLLATE utf8mb4_unicode_ci;
-
-USE homework_db;
+USE learnairium;
 
 CREATE TABLE IF NOT EXISTS concept_tags (
     id              VARCHAR(36)     NOT NULL,
