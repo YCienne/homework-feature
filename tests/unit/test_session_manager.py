@@ -88,3 +88,36 @@ async def test_limit_reached(redis):
 
 def test_ownership_pass(): assert SessionManager(AsyncMock()).verify_ownership(make_session(student_id="abc"), "abc")
 def test_ownership_fail(): assert not SessionManager(AsyncMock()).verify_ownership(make_session(student_id="abc"), "xyz")
+
+
+@pytest.mark.asyncio
+async def test_skip_advance_does_not_reset_guardrail_counter(redis):
+    """Advancing via a skip (no student answer) must keep the consecutive-skip count."""
+    manager = SessionManager(redis)
+    s = make_session()
+    await manager.record_skip_attempt(s)
+    await manager.advance_step(s, "q1", None)
+    assert s.skip_attempts == 1
+    await manager.record_skip_attempt(s)
+    await manager.advance_step(s, "q2", None)
+    assert s.skip_attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_student_answer_resets_guardrail_counter(redis):
+    manager = SessionManager(redis)
+    s = make_session(skip_attempts=2)
+    await manager.advance_step(s, "q1", "my answer")
+    assert s.skip_attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_skips_used_is_a_lifetime_total(redis):
+    """skips_used feeds concept tracking and must survive the guardrail reset."""
+    manager = SessionManager(redis)
+    s = make_session()
+    await manager.record_skip_attempt(s)
+    await manager.record_skip_attempt(s)
+    await manager.advance_step(s, "q1", "my answer")
+    assert s.skip_attempts == 0
+    assert s.skips_used == 2

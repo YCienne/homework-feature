@@ -21,7 +21,8 @@ class Session(BaseModel):
     current_step_index: int = 0
     max_steps_allowed: int = 5
     steps_revealed: int = 0
-    skip_attempts: int = 0
+    skip_attempts: int = 0   # consecutive SHOW_NEXT_STEP presses since the student last answered (guardrail)
+    skips_used: int = 0      # total SHOW_NEXT_STEP presses this session (analytics)
     hints_used: int = 0
     is_complete: bool = False
     step_history: list[StepRecord] = Field(default_factory=list)

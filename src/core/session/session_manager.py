@@ -56,11 +56,15 @@ class SessionManager:
         session.step_history.append(record)
         session.current_step_index += 1
         session.steps_revealed += 1
-        session.skip_attempts = 0
+        # Only a real answer clears the skip guardrail; advancing via a skip must not,
+        # otherwise consecutive skips could never accumulate to the threshold.
+        if student_response is not None:
+            session.skip_attempts = 0
         return await self.save(session)
 
     async def record_skip_attempt(self, session: Session) -> Session:
         session.skip_attempts += 1
+        session.skips_used += 1
         return await self.save(session)
 
     async def record_hint_used(self, session: Session) -> Session:

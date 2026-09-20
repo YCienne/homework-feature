@@ -127,3 +127,52 @@ async def test_completed_session_locked(override_app_dependencies):
             headers={"Authorization": "Bearer fake"})
     assert r.status_code == 400
     assert r.json()["detail"]["error"] == "SESSION_COMPLETE"
+
+
+def _use_stateful_redis(mock_redis, session: Session) -> dict:
+    """Back the mock Redis with a dict so successive requests see each other's writes."""
+    store = {f"hw:session:{session.session_id}": session.to_redis()}
+
+    async def _setex(key, ttl, value):
+        store[key] = value
+        return True
+
+    async def _get(key):
+        return store.get(key)
+
+    mock_redis.setex = AsyncMock(side_effect=_setex)
+    mock_redis.get = AsyncMock(side_effect=_get)
+    return store
+
+
+@pytest.mark.asyncio
+async def test_consecutive_skips_hit_guardrail_until_student_answers(override_app_dependencies):
+    """Regression: advancing via a skip used to reset the counter, so the guardrail never fired."""
+    session = Session(
+        student_id="student-test-123", question_raw="What is gravity?",
+        question_clean="What is gravity?", last_step_question="What force pulls objects?",
+    )
+    store = _use_stateful_redis(override_app_dependencies, session)
+    url = f"/homework/session/{session.session_id}/action"
+    headers = {"Authorization": "Bearer fake"}
+
+    async def act(client, **body):
+        r = await client.post(url, json=body, headers=headers)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    with patch("src.core.llm.retry_handler.call_llm", new=AsyncMock(return_value=valid_llm_json())):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            # First two skips are allowed and advance the step
+            assert "Try this step first" not in (await act(c, action="SHOW_NEXT_STEP"))["explanation"]
+            assert "Try this step first" not in (await act(c, action="SHOW_NEXT_STEP"))["explanation"]
+            # Third consecutive skip is blocked, and stays blocked
+            assert "Try this step first" in (await act(c, action="SHOW_NEXT_STEP"))["explanation"]
+            assert "Try this step first" in (await act(c, action="SHOW_NEXT_STEP"))["explanation"]
+            saved = Session.from_redis(store[f"hw:session:{session.session_id}"])
+            assert saved.current_step_index == 2   # blocked skips do not advance
+            assert saved.skips_used == 4           # but every press is counted
+
+            # Answering clears the guardrail, so skipping works again
+            await act(c, action="CONTINUE", response="Gravity pulls things down")
+            assert "Try this step first" not in (await act(c, action="SHOW_NEXT_STEP"))["explanation"]

@@ -104,7 +104,7 @@ async def session_action(
                     completed=True,
                     steps_needed=session.steps_revealed + 1,
                     hints_used=session.hints_used,
-                    skips_used=session.skip_attempts,
+                    skips_used=session.skips_used,
                 )
                 logger.info(f"Session completed and concept tracked: {session_id}")
             else:
@@ -116,7 +116,7 @@ async def session_action(
             await manager.advance_step(session, session.last_step_question, body.response)
 
     elif body.action == "SHOW_NEXT_STEP":
-        # Skip was allowed (skip_attempts < threshold) — advance step
+        # Skip was allowed (fewer than SKIP_GUARDRAIL_THRESHOLD consecutive skips) — advance step
         await manager.advance_step(session, session.last_step_question, None)
 
     # ── Persist the new step's question for next IM_NOT_SURE / EXPLAIN_AGAIN ──

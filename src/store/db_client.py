@@ -31,10 +31,44 @@ def get_session_factory() -> async_sessionmaker:
     return _session_factory
 
 
-async def get_db_session() -> AsyncSession:
-    factory = get_session_factory()
-    async with factory() as session:
-        yield session
+class LazyDBSession:
+    """
+    Opens the real AsyncSession on first use.
+
+    Routes that only occasionally write (e.g. concept tracking on session
+    completion) can depend on this without building the engine or touching the
+    database on every request — so a missing or unreachable DB cannot break
+    requests that never write.
+    """
+
+    def __init__(self) -> None:
+        self._session: AsyncSession | None = None
+
+    async def execute(self, *args, **kwargs):
+        if self._session is None:
+            self._session = get_session_factory()()
+        return await self._session.execute(*args, **kwargs)
+
+    async def commit(self) -> None:
+        if self._session is not None:
+            await self._session.commit()
+
+    async def rollback(self) -> None:
+        if self._session is not None:
+            await self._session.rollback()
+
+    async def close(self) -> None:
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
+
+
+async def get_db_session():
+    db = LazyDBSession()
+    try:
+        yield db
+    finally:
+        await db.close()
 
 
 async def close_db() -> None:

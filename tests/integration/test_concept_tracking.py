@@ -117,3 +117,33 @@ async def test_concept_tag_not_written_on_incomplete_step(mock_db, override_app_
     assert r.status_code == 200
     assert r.json()["is_final_step"] is False
     mock_db.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_concept_tag_records_lifetime_skips(mock_db, override_app_dependencies):
+    """Regression: skips_used was read from the per-step counter, which advance_step had reset to 0."""
+    final_response = json.dumps({
+        "step_title": "Well done!", "explanation": "Great work!", "question": None,
+        "hint": None, "final_answer": "The answer is 10.", "is_final_step": True,
+    })
+    session = Session(
+        student_id="student-test-123", question_raw="What is gravity?",
+        question_clean="What is gravity?", subject="science", topic="forces",
+        current_step_index=4, max_steps_allowed=5,
+        hints_used=1, skips_used=2, skip_attempts=2,
+        last_step_question="What is the formula for gravitational force?",
+    )
+    override_app_dependencies.get = AsyncMock(return_value=session.to_redis())
+
+    with patch("src.core.llm.retry_handler.call_llm", new=AsyncMock(return_value=final_response)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post(
+                f"/homework/session/{session.session_id}/action",
+                json={"action": "CONTINUE", "response": "F = Gm1m2/r^2"},
+                headers={"Authorization": "Bearer fake"},
+            )
+
+    assert r.status_code == 200, r.text
+    params = mock_db.execute.call_args[0][1]
+    assert params["skips_used"] == 2
+    assert params["hints_used"] == 1
