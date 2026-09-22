@@ -1,3 +1,4 @@
+import hmac
 import logging
 from typing import Optional
 
@@ -13,7 +14,8 @@ bearer_scheme = HTTPBearer()
 _jwks_cache: Optional[dict] = None
 
 # ── Dev bypass ────────────────────────────────────────────────────────────────
-DEV_TOKEN = "dev-token-learnarium"
+# The accepted token comes from settings.dev_bypass_token (DEV_BYPASS_TOKEN in
+# .env), never hardcoded here — see settings.py for why.
 DEV_STUDENT_ID = "dev-student-001"
 
 class AuthenticatedStudent:
@@ -84,8 +86,14 @@ async def get_current_student(
     token = credentials.credentials
 
     # ── Dev bypass ────────────────────────────────────────────────────────────
-    # In development, accept the hardcoded dev token without hitting Cognito
-    if settings.environment == "development" and token == DEV_TOKEN:
+    # In development, accept the configured dev token without hitting Cognito.
+    # dev_bypass_token defaults to "" (disabled) so this never matches unless
+    # a deployment has explicitly set one.
+    if (
+        settings.environment == "development"
+        and settings.dev_bypass_token
+        and hmac.compare_digest(token, settings.dev_bypass_token)
+    ):
         logger.debug("Dev token accepted — bypassing Cognito validation")
         return AuthenticatedStudent(
             student_id=DEV_STUDENT_ID,

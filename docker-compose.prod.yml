@@ -1,0 +1,72 @@
+version: "3.9"
+
+# Interim/demo hosting: one EC2 box running this whole stack behind Caddy for
+# automatic HTTPS. See docs/HOSTING.md for the full runbook.
+#
+# Differences from docker-compose.yml (local dev):
+#   - homework-service, redis and mysql publish NO ports to the host — only
+#     Caddy is reachable from outside, over 80/443.
+#   - No bind-mounted source (.:/app) — runs the built image as-is.
+#   - Adds a Caddy service for TLS termination and serving the frontend build.
+#
+# Run from the repo root:
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  homework-service:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@mysql:3306/learnairium
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: learnairium
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./homework-frontend/dist:/srv/frontend:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - homework-service
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,9 @@
+{$SITE_ADDRESS} {
+	# API — forwarded as-is; the backend's own routers expect the /homework prefix.
+	reverse_proxy /homework/* homework-service:2095
+
+	# Frontend static build (homework-frontend/dist, mounted read-only).
+	root * /srv/frontend
+	file_server
+	encode gzip
+}

@@ -156,9 +156,10 @@ container. `docker-compose.yml`'s own `environment:` block overrides `.env`'s
 `REDIS_URL`/`DATABASE_URL` for containerized runs, so local dev is unaffected
 by whatever production values are configured in `.env`.
 
-Dev-mode auth bypass: send `Authorization: Bearer dev-token-learnarium` to skip
-real Cognito validation when `ENVIRONMENT=development` (see
-`src/api/middleware/auth.py`).
+Dev-mode auth bypass: set `DEV_BYPASS_TOKEN` in `.env` (see `.env.example` for how
+to generate one), then send `Authorization: Bearer <that value>` to skip real
+Cognito validation when `ENVIRONMENT=development` (see `src/api/middleware/auth.py`).
+Disabled by default — an empty `DEV_BYPASS_TOKEN` never matches any token.
 
 ## Testing
 
@@ -178,6 +179,9 @@ Learnairium's backend infrastructure (not directly internet-facing — reached
 via Route 53 → ALB → security groups, same pattern as the main platform).
 Redis and RDS are shared with the main platform rather than provisioned
 separately for this service.
+
+For a temporary, share-a-link demo deployment (single EC2 instance, self-contained
+stack, not the shared infra above), see [docs/HOSTING.md](docs/HOSTING.md).
 
 ## Integration with the main Learnairium website
 

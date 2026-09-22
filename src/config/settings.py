@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     cognito_client_id: str = Field(default="")
     student_id_field: str = Field(default="sub")
 
+    # ── Dev auth bypass ───────────────────────────────────────────────────────
+    # Only used when environment=development. Empty (the default) disables the
+    # bypass entirely, so an environment that forgets to set this falls back to
+    # real Cognito validation rather than silently accepting a known token.
+    # Never hardcode this value in source — it lets anyone with the token skip
+    # auth. Generate a random one per deployment, e.g.: python -c "import secrets; print(secrets.token_urlsafe(24))"
+    dev_bypass_token: str = Field(default="")
+
     # ── Redis ─────────────────────────────────────────────────────────────────
     redis_url: str = Field(default="redis://host.docker.internal:6379")
     redis_password: str = Field(default="")
