@@ -1,13 +1,19 @@
 """
-LLM Client — supports DeepSeek, Gemini, Anthropic (direct API), and Claude Platform on AWS.
+LLM Client — supports DeepSeek, Gemini, Anthropic (direct API), Claude Platform
+on AWS, and Amazon Bedrock.
 Switch providers by setting LLM_PROVIDER in .env:
-LLM_PROVIDER=gemini | deepseek | anthropic | anthropic_aws
+LLM_PROVIDER=gemini | deepseek | anthropic | anthropic_aws | bedrock
 
 anthropic_aws authenticates via AWS IAM/SigV4 (the default AWS credential chain)
 rather than an API key, and requires CLAUDE_AWS_REGION. The workspace's AWS
 region only scopes IAM/billing — it does not pin where inference runs, so it
 is not on its own a data-residency guarantee (confirm with Anthropic if a
 requirement like POPIA applies before relying on region choice alone).
+
+bedrock also authenticates via the default AWS credential chain, calling
+bedrock-runtime's Converse API. Requires BEDROCK_REGION and BEDROCK_MODEL_ID;
+the model must be enabled for that region in the account's Bedrock console —
+access is granted per-region, not account-wide.
 """
 import logging
 import asyncio
@@ -17,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 _anthropic_client = None
 _anthropic_aws_client = None
+_bedrock_client = None
 _gemini_client = None  # Updated to track the modern unified GenAI client instance
 _deepseek_client = None
 
@@ -62,6 +69,18 @@ def _get_anthropic_aws_client():
         )
     return _anthropic_aws_client
 
+def _get_bedrock_client():
+    """Amazon Bedrock — IAM/SigV4 auth via the AWS default credential chain
+    (the EC2 instance's attached role in production), not an API key."""
+    global _bedrock_client
+    if _bedrock_client is None:
+        import boto3
+        settings = get_settings()
+        if not settings.bedrock_region:
+            raise LLMProviderError("bedrock_region is not configured for the bedrock provider")
+        _bedrock_client = boto3.client("bedrock-runtime", region_name=settings.bedrock_region)
+    return _bedrock_client
+
 def _get_gemini_client():
     """Initializes the modern Google GenAI Client with explicit API key access."""
     global _gemini_client
@@ -81,10 +100,12 @@ async def call_llm(messages: list[dict]) -> str:
         return await _call_anthropic(messages)
     elif provider == "anthropic_aws":
         return await _call_anthropic_aws(messages)
+    elif provider == "bedrock":
+        return await _call_bedrock(messages)
     elif provider == "gemini":
         return await _call_gemini(messages)
     else:
-        raise LLMProviderError(f"Unknown LLM_PROVIDER: '{provider}'. Must be deepseek, anthropic, anthropic_aws, or gemini.")
+        raise LLMProviderError(f"Unknown LLM_PROVIDER: '{provider}'. Must be deepseek, anthropic, anthropic_aws, bedrock, or gemini.")
 
 async def _call_deepseek(messages: list[dict]) -> str:
     try:
@@ -129,6 +150,33 @@ async def _call_anthropic_aws(messages: list[dict]) -> str:
         return response.content[0].text
     except Exception as e:
         raise LLMProviderError(f"Claude Platform on AWS error: {e}")
+
+async def _call_bedrock(messages: list[dict]) -> str:
+    try:
+        settings = get_settings()
+        if not settings.bedrock_model_id:
+            raise LLMProviderError("bedrock_model_id is not configured for the bedrock provider")
+        client = _get_bedrock_client()
+        system, rest = _split_system(messages)
+        converse_messages = [
+            {"role": m["role"], "content": [{"text": m["content"]}]}
+            for m in rest
+        ]
+        kwargs = {
+            "modelId": settings.bedrock_model_id,
+            "messages": converse_messages,
+            "inferenceConfig": {"maxTokens": 1000, "temperature": 0.3},
+        }
+        if system:
+            kwargs["system"] = [{"text": system}]
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: client.converse(**kwargs))
+        return response["output"]["message"]["content"][0]["text"]
+    except LLMProviderError:
+        raise
+    except Exception as e:
+        raise LLMProviderError(f"Bedrock error: {e}")
 
 async def _call_gemini(messages: list[dict]) -> str:
     """Executes a structured text completion via the updated google-genai client."""

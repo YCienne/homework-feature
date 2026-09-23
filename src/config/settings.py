@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     # ── LLM Provider ──────────────────────────────────────────────────────────
-    llm_provider: str = Field(default="anthropic")   # deepseek | gemini | anthropic | anthropic_aws
+    llm_provider: str = Field(default="anthropic")   # deepseek | gemini | anthropic | anthropic_aws | bedrock
     anthropic_api_key: str = Field(default="")
     gemini_api_key: str = Field(default="")
     deepseek_api_key: str = Field(default="")
@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     # inherited from aws_region below (see llm_client.py docstring).
     claude_aws_region: str = Field(default="")
     claude_aws_workspace_id: str = Field(default="")
+
+    # ── Amazon Bedrock (IAM/SigV4 — no API key) ─────────────────────────────────
+    # Authenticates via the default AWS credential chain (the EC2 instance's
+    # attached IAM role in production). bedrock_region must be a region where
+    # the model is actually enabled in the account's Bedrock console — model
+    # access is granted per-region, not account-wide.
+    bedrock_region: str = Field(default="")
+    bedrock_model_id: str = Field(default="")
 
     # ── Image Extraction ──────────────────────────────────────────────────────
     image_extraction_provider: str = Field(default="gemini")  # gemini | anthropic
